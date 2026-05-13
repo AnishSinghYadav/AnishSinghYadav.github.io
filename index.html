@@ -2640,7 +2640,7 @@ AVAILABILITY: Open to AI/ML roles, freelance AI projects, research collaboration
     const chatSendBtn = document.getElementById('chatSendBtn');
     const chatMessages = document.getElementById('chatMessages');
     let chatOpen = false;
-    const GROK_API_KEY = 'xai-lxai-sSLd9SL4A25kaxwUYzugsP97UM4LHU01MBU5qX3h6LxAWpGUBuPi0wbo2Vg5ufEhD0jCUokx8idx4q5V';
+    const GROK_API_KEY = 'xai-3wH7fvzG04UhbMl5A58igRjVKJ1S2yq4P1n3gRs6LenL9K7IimrM1q9YlPxYuCBalqKRKUyRICgiEGWR';
 
     chatToggle.addEventListener('click', () => {
       chatOpen = !chatOpen;
@@ -2682,48 +2682,60 @@ AVAILABILITY: Open to AI/ML roles, freelance AI projects, research collaboration
       document.getElementById('quickBtns').style.display = 'none';
       showTyping();
 
-      // RAG: build context-augmented prompt
-      const systemPrompt = `You are an AI assistant for Anish Singh Yadav's portfolio website. You answer questions about Anish based on his resume and background. Be helpful, concise, and professional. Keep replies under 100 words unless detailed info is specifically asked.
+      const systemPrompt = `You are an AI assistant for Anish Singh Yadav's portfolio website. Answer questions about Anish based only on his resume context below. Be helpful, concise and professional. Keep replies under 120 words unless more detail is asked.
 
-Here is Anish's complete resume context (use this as your knowledge base — this is the RAG context):
+RESUME CONTEXT:
 ${RESUME_CONTEXT}
 
-Important: Only answer based on the provided context. If asked something not in the resume, politely say you don't have that information but they can contact Anish directly.`;
+If asked something not in the resume, say you don't have that info but they can contact Anish directly at anishsinghyadav2909@gmail.com.`;
 
-      try {
-        const response = await fetch('https://corsproxy.io/?url=https://api.x.ai/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${GROK_API_KEY}`
-          },
-          body: JSON.stringify({
-            model: 'grok-3-mini',
-            messages: [
-              { role: 'system', content: systemPrompt },
-              { role: 'user', content: userMsg }
-            ],
-            max_tokens: 300,
-            temperature: 0.7
-          })
-        });
+      // Try multiple CORS proxies in order
+      const proxies = [
+        (url) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+        (url) => `https://corsproxy.io/?url=${encodeURIComponent(url)}`,
+        (url) => `https://cors-anywhere.herokuapp.com/${url}`,
+      ];
 
-        hideTyping();
+      const apiUrl = 'https://api.x.ai/v1/chat/completions';
+      const body = JSON.stringify({
+        model: 'grok-3-mini',
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userMsg }
+        ],
+        max_tokens: 300,
+        temperature: 0.7
+      });
 
-        if (!response.ok) {
-          // Fallback to local RAG if API key not set or fails
-          const fallbackAnswer = localRAGFallback(userMsg);
-          appendMsg('ai', fallbackAnswer);
-          return;
+      for (const makeProxy of proxies) {
+        try {
+          const response = await fetch(makeProxy(apiUrl), {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${GROK_API_KEY}`,
+              'x-requested-with': 'XMLHttpRequest'
+            },
+            body
+          });
+
+          if (!response.ok) continue;
+
+          const data = await response.json();
+          const aiText = data.choices?.[0]?.message?.content;
+          if (aiText) {
+            hideTyping();
+            appendMsg('ai', aiText);
+            return;
+          }
+        } catch (err) {
+          continue;
         }
-
-        const data = await response.json();
-        const aiText = data.choices?.[0]?.message?.content || localRAGFallback(userMsg);
-        appendMsg('ai', aiText);
-      } catch (err) {
-        hideTyping();
-        appendMsg('ai', localRAGFallback(userMsg));
       }
+
+      // All proxies failed — use smart local RAG
+      hideTyping();
+      appendMsg('ai', localRAGFallback(userMsg));
     }
 
     /* ─── LOCAL RAG FALLBACK ─── */
@@ -2753,7 +2765,7 @@ Important: Only answer based on the provided context. If asked something not in 
       if (q.includes('location') || q.includes('where') || q.includes('india') || q.includes('indore')) {
         return "Anish is based in Indore, Madhya Pradesh, India. He's open to remote roles globally and on-site opportunities in India.";
       }
-      return "I'm Anish's portfolio AI assistant. I can tell you about his skills, projects, experience, certifications, and availability. What would you like to know? To add a live Grok API key, replace 'YOUR_GROK_API_KEY' in the code.";
+      return "I'm Anish's AI assistant! Ask me about his skills, projects, experience, certifications, or availability — I'm happy to help.";
     }
 
     function sendQuick(msg) { chatInput.value = msg; sendMessage(msg); }
